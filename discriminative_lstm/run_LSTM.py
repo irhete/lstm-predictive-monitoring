@@ -21,7 +21,8 @@ import dataset_confs
 import glob
 from sklearn.metrics import roc_auc_score, precision_recall_fscore_support
 
-datasets = ["bpic2011_f%s"%formula for formula in range(1,2)]
+
+#datasets = ["bpic2011_f%s"%formula for formula in range(1,2)]
 #datasets = ["bpic2015_%s_f%s"%(municipality, formula) for municipality in range(1,6) for formula in range(1,3)]
 #datasets = ["insurance_activity", "insurance_followup"]
 #datasets = ["traffic_fines_f%s"%formula for formula in range(1,4)]
@@ -38,6 +39,7 @@ max_len = 20
 lstmsize = 128
 dropout = 0
 optim = 'rmsprop'
+learning_rate = 0.001
 loss = 'binary_crossentropy'
 nb_epoch = 15
 batch_size = 1
@@ -127,15 +129,7 @@ for dataset_name in datasets:
                 y[idx] = label
                 idx += 1
         print(time.time() - start)  
-        
-        """
-        y = pd.get_dummies(y)
-        classes = y.columns
-        y = y.as_matrix()
-        
-        X = np.load(os.path.join("input_lstm", "%s_train_X.npy"%dataset_name))
-        y = np.load(os.path.join("input_lstm", "%s_train_y.npy"%dataset_name))
-        """
+
         classes = np.array([neg_label, pos_label])
         
         data_dim = X.shape[2]
@@ -150,7 +144,7 @@ for dataset_name in datasets:
         model.add(Dense(n_classes, activation='softmax'))
         
         print('Compiling model...')
-        model.compile(loss=loss, optimizer=optim)
+        model.compile(loss=loss, optimizer=RMSprop(lr=learning_rate))
         
         
         print("Training...")
