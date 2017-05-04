@@ -41,21 +41,22 @@ dropout = 0
 optim = 'rmsprop'
 learning_rate = 0.001
 loss = 'binary_crossentropy'
-nb_epoch = 1
+nb_epoch = 15
 batch_size = 1
 time_dim = max_len
 n_classes = 2
+activation_fn = 'softsign'
 
     
 ##### MAIN PART ######    
 
 for dataset_name in datasets:
         
-    outfile = "results/results_lstm_%s_lstmsize%s_dropout%s_batch%s.csv"%(dataset_name, lstmsize, int(dropout*100), batch_size)
+    outfile = "results/results_lstm_%s_lstmsize%s_dropout%s_batch%s_softsign.csv"%(dataset_name, lstmsize, int(dropout*100), batch_size)
         
-    checkpoint_prefix = "checkpoints/%s_weights_lstmsize%s_dropout%s_batch%s"%(dataset_name, lstmsize, int(dropout*100), batch_size)
+    checkpoint_prefix = "checkpoints/%s_weights_lstmsize%s_dropout%s_batch%s_softsign"%(dataset_name, lstmsize, int(dropout*100), batch_size)
     checkpoint_filepath = "%s.{epoch:02d}-{val_loss:.2f}.hdf5"%checkpoint_prefix
-    loss_file = "loss_files/%s_loss_lstmsize%s_dropout%s_batch%s.txt"%(dataset_name, lstmsize, int(dropout*100), batch_size)
+    loss_file = "loss_files/%s_loss_lstmsize%s_dropout%s_batch%s_softsign.txt"%(dataset_name, lstmsize, int(dropout*100), batch_size)
         
     with open(outfile, 'w') as fout:
         fout.write("%s;%s;%s;%s;%s\n"%("dataset", "method", "nr_events", "metric", "score"))
@@ -141,10 +142,10 @@ for dataset_name in datasets:
         model = Sequential()
         model.add(LSTM(lstmsize, input_shape=(time_dim, data_dim)))
         model.add(Dropout(dropout))
-        model.add(Dense(n_classes, activation='softmax'))
+        model.add(Dense(n_classes, activation=activation_fn))
         
         print('Compiling model...')
-        model.compile(loss=loss, optimizer='rmsprop')
+        model.compile(loss=loss, optimizer=RMSprop(lr=learning_rate))
         
         
         print("Training...")
@@ -154,7 +155,7 @@ for dataset_name in datasets:
         with open(loss_file, 'w') as fout2:
             fout2.write("epoch;train_loss;val_loss;params;dataset\n")
             for epoch in range(nb_epoch):
-                fout2.write("%s;%s;%s;%s;%s\n"%(epoch, history.history['loss'][epoch], history.history['val_loss'][epoch], "lstmsize%s_dropout%s"%(lstmsize, int(dropout*100)), dataset_name))
+                fout2.write("%s;%s;%s;%s;%s\n"%(epoch, history.history['loss'][epoch], history.history['val_loss'][epoch], "lstmsize%s_dropout%s_softsign"%(lstmsize, int(dropout*100)), dataset_name))
         
         
         # load the best weights
@@ -195,7 +196,7 @@ for dataset_name in datasets:
                     test_X[idx] = pad_sequences(group[np.newaxis,:i,:-2], maxlen=max_len)
                     test_y[idx] = label
                     idx += 1
-        
+
             # predict    
             preds = model.predict(test_X)
             
