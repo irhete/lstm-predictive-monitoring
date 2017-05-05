@@ -46,17 +46,19 @@ batch_size = 1
 time_dim = max_len
 n_classes = 2
 
+output_dir = "/storage/anna_irene"
+
     
 ##### MAIN PART ######    
 
 for dataset_name in datasets:
         
-    outfile = "results/results_lstm_%s_lstmsize%s_dropout%s_batch%s.csv"%(dataset_name, lstmsize, int(dropout*100), batch_size)
+    outfile = os.path.join(output_dir, "results/results_lstm_%s_lstmsize%s_dropout%s_batch%s.csv"%(dataset_name, lstmsize, int(dropout*100), batch_size))
         
-    checkpoint_prefix = "checkpoints/%s_weights_lstmsize%s_dropout%s_batch%s"%(dataset_name, lstmsize, int(dropout*100), batch_size)
+    checkpoint_prefix = os.path.join(output_dir, "checkpoints/%s_weights_lstmsize%s_dropout%s_batch%s"%(dataset_name, lstmsize, int(dropout*100), batch_size))
     checkpoint_filepath = "%s.{epoch:02d}-{val_loss:.2f}.hdf5"%checkpoint_prefix
-    loss_file = "loss_files/%s_loss_lstmsize%s_dropout%s_batch%s.txt"%(dataset_name, lstmsize, int(dropout*100), batch_size)
-        
+    loss_file = os.path.join(output_dir, "loss_files/%s_loss_lstmsize%s_dropout%s_batch%s.txt"%(dataset_name, lstmsize, int(dropout*100), batch_size))
+    
     with open(outfile, 'w') as fout:
         fout.write("%s;%s;%s;%s;%s\n"%("dataset", "method", "nr_events", "metric", "score"))
         
@@ -112,6 +114,7 @@ for dataset_name in datasets:
         dt_train = pd.concat([dt_train_scaled, dt_train_cat], axis=1)
         dt_train[case_id_col] = train[case_id_col]
         dt_train[label_col] = train[label_col].apply(lambda x: 1 if x == pos_label else 0)
+        
 
         data_dim = dt_train.shape[1] - 2
         n_prefixes = sum(grouped.size().apply(lambda x: min(x, max_len)))
@@ -119,10 +122,10 @@ for dataset_name in datasets:
         grouped = dt_train.groupby(case_id_col)
         start = time.time()
         X = np.empty((n_prefixes, max_len, data_dim), dtype=np.float32)
-        y = np.empty((n_prefixes, n_classes), dtype=np.float32)
+        y = np.zeros((n_prefixes, n_classes))
         idx = 0
         for _, group in grouped:
-            label = (group[label_col].iloc[0], 1 - group[label_col].iloc[0])
+            label = [group[label_col].iloc[0], 1 - group[label_col].iloc[0]]
             group = group.as_matrix()
             for i in range(1, min(max_len, len(group)) + 1):
                 X[idx] = pad_sequences(group[np.newaxis,:i,:-2], maxlen=max_len)
@@ -156,7 +159,7 @@ for dataset_name in datasets:
             for epoch in range(nb_epoch):
                 fout2.write("%s;%s;%s;%s;%s\n"%(epoch, history.history['loss'][epoch], history.history['val_loss'][epoch], "lstmsize%s_dropout%s"%(lstmsize, int(dropout*100)), dataset_name))
         
-        
+            
         # load the best weights
         lstm_weights_file = glob.glob("%s*.hdf5"%checkpoint_prefix)[-1]
         model.load_weights(lstm_weights_file)

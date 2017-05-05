@@ -38,7 +38,6 @@ train_ratio = 0.8
 max_len = 20
 lstmsize = 128
 dropout = 0
-optim = 'rmsprop'
 learning_rate = 0.00001
 loss = 'binary_crossentropy'
 nb_epoch = 15
@@ -46,17 +45,19 @@ batch_size = 1
 time_dim = max_len
 n_classes = 2
 
+output_dir = "/storage/anna_irene"
+
     
 ##### MAIN PART ######    
 
 for dataset_name in datasets:
         
-    outfile = "results/results_lstm_%s_lstmsize%s_dropout%s_batch%s_lr%s.csv"%(dataset_name, lstmsize, int(dropout*100), batch_size, int(learning_rate*100000))
+    outfile = os.path.join(output_dir, "results/results_lstm_%s_lstmsize%s_dropout%s_batch%s_lr%s.csv"%(dataset_name, lstmsize, int(dropout*100), batch_size, int(learning_rate*100000)))
         
-    checkpoint_prefix = "checkpoints/%s_weights_lstmsize%s_dropout%s_batch%s_lr%s"%(dataset_name, lstmsize, int(dropout*100), batch_size, int(learning_rate*100000))
+    checkpoint_prefix = os.path.join(output_dir, "checkpoints/%s_weights_lstmsize%s_dropout%s_batch%s_lr%s"%(dataset_name, lstmsize, int(dropout*100), batch_size, int(learning_rate*100000)))
     checkpoint_filepath = "%s.{epoch:02d}-{val_loss:.2f}.hdf5"%checkpoint_prefix
-    loss_file = "loss_files/%s_loss_lstmsize%s_dropout%s_batch%s_lr%s.txt"%(dataset_name, lstmsize, int(dropout*100), batch_size,
-                                                                      int(learning_rate*100000))
+    
+    loss_file = os.path.join(output_dir, "loss_files/%s_loss_lstmsize%s_dropout%s_batch%s_lr%s.txt"%(dataset_name, lstmsize, int(dropout*100), batch_size, int(learning_rate*100000)))
         
     with open(outfile, 'w') as fout:
         fout.write("%s;%s;%s;%s;%s\n"%("dataset", "method", "nr_events", "metric", "score"))
@@ -120,7 +121,7 @@ for dataset_name in datasets:
         grouped = dt_train.groupby(case_id_col)
         start = time.time()
         X = np.empty((n_prefixes, max_len, data_dim), dtype=np.float32)
-        y = np.empty((n_prefixes, n_classes), dtype=np.float32)
+        y = np.zeros((n_prefixes, n_classes), dtype=np.float32)
         idx = 0
         for _, group in grouped:
             label = (group[label_col].iloc[0], 1 - group[label_col].iloc[0])
