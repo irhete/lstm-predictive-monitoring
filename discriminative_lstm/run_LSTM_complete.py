@@ -40,10 +40,9 @@ lstmsize = 128
 dropout = 0
 learning_rate = 0.00001
 loss = 'binary_crossentropy'
-nb_epoch = 15
+nb_epoch = 30
 batch_size = 1
 time_dim = max_len
-n_classes = 1
 
 output_dir = "/storage/anna_irene"
 
@@ -52,12 +51,12 @@ output_dir = "/storage/anna_irene"
 
 for dataset_name in datasets:
         
-    outfile = os.path.join(output_dir, "results/results_lstm_%s_lstmsize%s_dropout%s_batch%s_lr%s_1class.csv"%(dataset_name, lstmsize, int(dropout*100), batch_size, int(learning_rate*100000)))
+    outfile = os.path.join(output_dir, "results/results_lstm_%s_lstmsize%s_dropout%s_batch%s_lr%s_complete.csv"%(dataset_name, lstmsize, int(dropout*100), batch_size, int(learning_rate*100000)))
         
-    checkpoint_prefix = os.path.join(output_dir, "checkpoints/%s_weights_lstmsize%s_dropout%s_batch%s_lr%s_1class"%(dataset_name, lstmsize, int(dropout*100), batch_size, int(learning_rate*100000)))
+    checkpoint_prefix = os.path.join(output_dir, "checkpoints/%s_weights_lstmsize%s_dropout%s_batch%s_lr%s_complete"%(dataset_name, lstmsize, int(dropout*100), batch_size, int(learning_rate*100000)))
     checkpoint_filepath = "%s.{epoch:02d}-{val_loss:.2f}.hdf5"%checkpoint_prefix
     
-    loss_file = os.path.join(output_dir, "loss_files/%s_loss_lstmsize%s_dropout%s_batch%s_lr%s_1class.txt"%(dataset_name, lstmsize, int(dropout*100), batch_size, int(learning_rate*100000)))
+    loss_file = os.path.join(output_dir, "loss_files/%s_loss_lstmsize%s_dropout%s_batch%s_lr%s_complete.txt"%(dataset_name, lstmsize, int(dropout*100), batch_size, int(learning_rate*100000)))
         
     with open(outfile, 'w') as fout:
         fout.write("%s;%s;%s;%s;%s\n"%("dataset", "method", "nr_events", "metric", "score"))
@@ -116,23 +115,19 @@ for dataset_name in datasets:
         dt_train[label_col] = train[label_col].apply(lambda x: 1 if x == pos_label else 0)
 
         data_dim = dt_train.shape[1] - 2
-        n_prefixes = sum(grouped.size().apply(lambda x: min(x, max_len)))
         
         grouped = dt_train.groupby(case_id_col)
         start = time.time()
-        X = np.empty((n_prefixes, max_len, data_dim), dtype=np.float32)
-        y = np.zeros((n_prefixes, n_classes), dtype=np.float32)
+        X = np.empty((len(grouped), max_len, data_dim), dtype=np.float32)
+        y = np.zeros((len(grouped), max_len, 1), dtype=np.float32)
         idx = 0
         for _, group in grouped:
             label = group[label_col].iloc[0]
             group = group.as_matrix()
-            for i in range(1, min(max_len, len(group)) + 1):
-                X[idx] = pad_sequences(group[np.newaxis,:i,:-2], maxlen=max_len)
-                y[idx] = label
-                idx += 1
+            X[idx,:,:] = pad_sequences(group[np.newaxis,:max_len,:-2], maxlen=max_len)
+            y[idx,:,:] = np.tile(label, (max_len, 1))
+            idx += 1
         print(time.time() - start)  
-
-        classes = np.array([neg_label, pos_label])
         
         data_dim = X.shape[2]
         
@@ -141,9 +136,9 @@ for dataset_name in datasets:
         
         print('Build model...')
         model = Sequential()
-        model.add(LSTM(lstmsize, input_shape=(time_dim, data_dim)))
+        model.add(LSTM(lstmsize, input_shape=(time_dim, data_dim), return_sequences=True))
         model.add(Dropout(dropout))
-        model.add(Dense(n_classes, activation='softmax'))
+        model.add(TimeDistributed(Dense(1, activation='softmax')))
         
         print('Compiling model...')
         model.compile(loss=loss, optimizer=RMSprop(lr=learning_rate))
@@ -156,9 +151,9 @@ for dataset_name in datasets:
         with open(loss_file, 'w') as fout2:
             fout2.write("epoch;train_loss;val_loss;params;dataset\n")
             for epoch in range(nb_epoch):
-                fout2.write("%s;%s;%s;%s;%s\n"%(epoch, history.history['loss'][epoch], history.history['val_loss'][epoch], "lstmsize%s_dropout%s_lr%s_1class"%(lstmsize, int(dropout*100), int(learning_rate*100000)), dataset_name))
+                fout2.write("%s;%s;%s;%s;%s\n"%(epoch, history.history['loss'][epoch], history.history['val_loss'][epoch], "lstmsize%s_dropout%s_lr%s_complete"%(lstmsize, int(dropout*100), int(learning_rate*100000)), dataset_name))
         
-        """
+        
         # load the best weights
         lstm_weights_file = glob.glob("%s*.hdf5"%checkpoint_prefix)[-1]
         model.load_weights(lstm_weights_file)
@@ -185,21 +180,19 @@ for dataset_name in datasets:
             dt_test = dt_test[dt_train.columns]
             
             grouped = dt_test.groupby(case_id_col)
-            n_prefixes = sum(grouped.size().apply(lambda x: min(x, max_len)))
 
-            test_X = np.empty((n_prefixes, max_len, data_dim), dtype=np.float32)
-            test_y = np.empty((n_prefixes, n_classes), dtype=np.float32)
+            test_X = np.empty((len(grouped), max_len, data_dim), dtype=np.float32)
+            test_y = np.empty(len(grouped), dtype=np.float32)
             idx = 0
             for _, group in grouped:
-                label = (group[label_col].iloc[0], 1 - group[label_col].iloc[0])
+                label = group[label_col].iloc[0]
                 group = group.as_matrix()
-                for i in range(1, min(max_len, len(group)) + 1):
-                    test_X[idx] = pad_sequences(group[np.newaxis,:i,:-2], maxlen=max_len)
-                    test_y[idx] = label
-                    idx += 1
+                test_X[idx] = pad_sequences(group[np.newaxis,:nr_events,:-2], maxlen=max_len)
+                test_y[idx] = label
+                idx += 1
 
             # predict    
-            preds = model.predict(test_X)
+            preds = model.predict(test_X)[:,nr_events-1] #(n_test_cases, max_len)
             
             # evaluate
             if len(np.unique(test_y)) < 2:
@@ -207,11 +200,11 @@ for dataset_name in datasets:
             else:
                 auc = roc_auc_score(test_y, preds)
                 
-            prec, rec, fscore, _ = precision_recall_fscore_support(test_y[:,np.where(classes==pos_label)[0][0]], [0 if pred < 0.5 else 1 for pred in preds[:,np.where(classes==pos_label)[0][0]]], average="binary")
+            #prec, rec, fscore, _ = precision_recall_fscore_support(test_y[:,np.where(classes==pos_label)[0][0]], [0 if pred < 0.5 else 1 for pred in preds[:,np.where(classes==pos_label)[0][0]]], average="binary")
                 
 
             fout.write("%s;%s;%s;%s;%s\n"%(dataset_name, method_name, nr_events, "auc", auc))
-            fout.write("%s;%s;%s;%s;%s\n"%(dataset_name, method_name, nr_events, "precision", prec))
-            fout.write("%s;%s;%s;%s;%s\n"%(dataset_name, method_name, nr_events, "recall", rec))
-            fout.write("%s;%s;%s;%s;%s\n"%(dataset_name, method_name, nr_events, "fscore", fscore))
-        """         
+            #fout.write("%s;%s;%s;%s;%s\n"%(dataset_name, method_name, nr_events, "precision", prec))
+            #fout.write("%s;%s;%s;%s;%s\n"%(dataset_name, method_name, nr_events, "recall", rec))
+            #fout.write("%s;%s;%s;%s;%s\n"%(dataset_name, method_name, nr_events, "fscore", fscore))
+                 

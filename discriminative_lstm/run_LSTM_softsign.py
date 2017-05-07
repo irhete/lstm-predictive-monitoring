@@ -115,7 +115,7 @@ for dataset_name in datasets:
         dt_train_cat = pd.get_dummies(train[dynamic_cat_cols+static_cat_cols])
         dt_train = pd.concat([dt_train_scaled, dt_train_cat], axis=1)
         dt_train[case_id_col] = train[case_id_col]
-        dt_train[label_col] = train[label_col].apply(lambda x: 1 if x == pos_label else 0)
+        dt_train[label_col] = train[label_col].apply(lambda x: 1 if x == pos_label else -1)
 
         data_dim = dt_train.shape[1] - 2
         n_prefixes = sum(grouped.size().apply(lambda x: min(x, max_len)))
@@ -123,10 +123,10 @@ for dataset_name in datasets:
         grouped = dt_train.groupby(case_id_col)
         start = time.time()
         X = np.empty((n_prefixes, max_len, data_dim), dtype=np.float32)
-        y = np.zeros((n_prefixes, n_classes), dtype=np.float32)
+        y = np.zeros((n_prefixes, 1), dtype=np.float32)
         idx = 0
         for _, group in grouped:
-            label = (group[label_col].iloc[0], 1 - group[label_col].iloc[0])
+            label = group[label_col].iloc[0]
             group = group.as_matrix()
             for i in range(1, min(max_len, len(group)) + 1):
                 X[idx] = pad_sequences(group[np.newaxis,:i,:-2], maxlen=max_len)
@@ -134,8 +134,6 @@ for dataset_name in datasets:
                 idx += 1
         print(time.time() - start)  
 
-        classes = np.array([neg_label, pos_label])
-        
         data_dim = X.shape[2]
         
         method_name = "lstm"
@@ -145,7 +143,7 @@ for dataset_name in datasets:
         model = Sequential()
         model.add(LSTM(lstmsize, input_shape=(time_dim, data_dim)))
         model.add(Dropout(dropout))
-        model.add(Dense(n_classes, activation=activation_fn))
+        model.add(Dense(1, activation=activation_fn))
         
         print('Compiling model...')
         model.compile(loss=loss, optimizer=RMSprop(lr=learning_rate))
@@ -178,7 +176,7 @@ for dataset_name in datasets:
             dt_test_cat = pd.get_dummies(dt_test[dynamic_cat_cols+static_cat_cols])
             dt_test = pd.concat([dt_test_scaled, dt_test_cat], axis=1)
             dt_test[case_id_col] = test[case_id_col]
-            dt_test[label_col] = test[label_col].apply(lambda x: 1 if x == pos_label else 0)
+            dt_test[label_col] = test[label_col].apply(lambda x: 1 if x == pos_label else -1)
 
             # add missing columns if necessary
             missing_cols = [col for col in dt_train.columns if col not in dt_test.columns]
@@ -190,10 +188,10 @@ for dataset_name in datasets:
             n_prefixes = sum(grouped.size().apply(lambda x: min(x, max_len)))
 
             test_X = np.empty((n_prefixes, max_len, data_dim), dtype=np.float32)
-            test_y = np.empty((n_prefixes, n_classes), dtype=np.float32)
+            test_y = np.empty((n_prefixes, 1), dtype=np.float32)
             idx = 0
             for _, group in grouped:
-                label = (group[label_col].iloc[0], 1 - group[label_col].iloc[0])
+                label = group[label_col].iloc[0]
                 group = group.as_matrix()
                 for i in range(1, min(max_len, len(group)) + 1):
                     test_X[idx] = pad_sequences(group[np.newaxis,:i,:-2], maxlen=max_len)
@@ -209,7 +207,7 @@ for dataset_name in datasets:
             else:
                 auc = roc_auc_score(test_y, preds)
                 
-            prec, rec, fscore, _ = precision_recall_fscore_support(test_y[:,np.where(classes==pos_label)[0][0]], [0 if pred < 0.5 else 1 for pred in preds[:,np.where(classes==pos_label)[0][0]]], average="binary")
+            prec, rec, fscore, _ = precision_recall_fscore_support(test_y, [-1 if pred < 0 else 1 for pred in preds], average="binary")
                 
 
             fout.write("%s;%s;%s;%s;%s\n"%(dataset_name, method_name, nr_events, "auc", auc))
