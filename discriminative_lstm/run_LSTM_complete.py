@@ -43,6 +43,7 @@ loss = 'binary_crossentropy'
 nb_epoch = 30
 batch_size = 1
 time_dim = max_len
+n_classes = 2
 
 output_dir = "/storage/anna_irene"
 
@@ -119,15 +120,17 @@ for dataset_name in datasets:
         grouped = dt_train.groupby(case_id_col)
         start = time.time()
         X = np.empty((len(grouped), max_len, data_dim), dtype=np.float32)
-        y = np.zeros((len(grouped), max_len, 1), dtype=np.float32)
+        y = np.zeros((len(grouped), max_len, n_classes), dtype=np.float32)
         idx = 0
         for _, group in grouped:
-            label = group[label_col].iloc[0]
+            label = [group[label_col].iloc[0], 1-group[label_col].iloc[0]]
             group = group.as_matrix()
             X[idx,:,:] = pad_sequences(group[np.newaxis,:max_len,:-2], maxlen=max_len)
             y[idx,:,:] = np.tile(label, (max_len, 1))
             idx += 1
-        print(time.time() - start)  
+        print(time.time() - start) 
+        
+        classes = np.array([neg_label, pos_label])
         
         data_dim = X.shape[2]
         
@@ -138,7 +141,7 @@ for dataset_name in datasets:
         model = Sequential()
         model.add(LSTM(lstmsize, input_shape=(time_dim, data_dim), return_sequences=True))
         model.add(Dropout(dropout))
-        model.add(TimeDistributed(Dense(1, activation='softmax')))
+        model.add(TimeDistributed(Dense(n_classes, activation='softmax'), input_shape=(time_dim, data_dim)))
         
         print('Compiling model...')
         model.compile(loss=loss, optimizer=RMSprop(lr=learning_rate))
@@ -182,17 +185,17 @@ for dataset_name in datasets:
             grouped = dt_test.groupby(case_id_col)
 
             test_X = np.empty((len(grouped), max_len, data_dim), dtype=np.float32)
-            test_y = np.empty(len(grouped), dtype=np.float32)
+            test_y = np.empty((len(grouped), n_classes), dtype=np.float32)
             idx = 0
             for _, group in grouped:
-                label = group[label_col].iloc[0]
+                label = [group[label_col].iloc[0], 1-group[label_col].iloc[0]]
                 group = group.as_matrix()
                 test_X[idx] = pad_sequences(group[np.newaxis,:nr_events,:-2], maxlen=max_len)
                 test_y[idx] = label
                 idx += 1
 
             # predict    
-            preds = model.predict(test_X)[:,nr_events-1] #(n_test_cases, max_len)
+            preds = model.predict(test_X)[:,max_len-1]#[:,nr_events-1] #(n_test_cases, max_len)
             
             # evaluate
             if len(np.unique(test_y)) < 2:
