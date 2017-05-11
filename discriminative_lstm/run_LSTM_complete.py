@@ -36,7 +36,7 @@ prefix_lengths = list(range(1,21))
 
 train_ratio = 0.8
 max_len = 20
-lstmsize = 128
+lstmsize = 256
 dropout = 0
 learning_rate = 0.00001
 loss = 'binary_crossentropy'
