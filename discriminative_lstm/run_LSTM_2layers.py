@@ -37,10 +37,11 @@ prefix_lengths = list(range(1,21))
 train_ratio = 0.8
 max_len = 20
 lstmsize = 128
+lstmsize2 = 128
 dropout = 0
 learning_rate = 0.00001
 loss = 'binary_crossentropy'
-nb_epoch = 150
+nb_epoch = 50
 batch_size = 1
 time_dim = max_len
 n_classes = 2
@@ -52,12 +53,12 @@ output_dir = "/storage/anna_irene"
 
 for dataset_name in datasets:
         
-    outfile = os.path.join(output_dir, "results/results_lstm_%s_lstmsize%s_dropout%s_batch%s_lr%s_complete.csv"%(dataset_name, lstmsize, int(dropout*100), batch_size, int(learning_rate*100000)))
+    outfile = os.path.join(output_dir, "results/results_lstm_%s_lstmsize%s_lstmsize2%s_dropout%s_batch%s_lr%s_complete.csv"%(dataset_name, lstmsize, lstmsize2, int(dropout*100), batch_size, int(learning_rate*100000)))
         
-    checkpoint_prefix = os.path.join(output_dir, "checkpoints/%s_weights_lstmsize%s_dropout%s_batch%s_lr%s_complete"%(dataset_name, lstmsize, int(dropout*100), batch_size, int(learning_rate*100000)))
+    checkpoint_prefix = os.path.join(output_dir, "checkpoints/%s_weights_lstmsize%s_lstmsize2%s_dropout%s_batch%s_lr%s_complete"%(dataset_name, lstmsize, lstmsize2, int(dropout*100), batch_size, int(learning_rate*100000)))
     checkpoint_filepath = "%s.{epoch:02d}-{val_loss:.2f}.hdf5"%checkpoint_prefix
     
-    loss_file = os.path.join(output_dir, "loss_files/%s_loss_lstmsize%s_dropout%s_batch%s_lr%s_complete.txt"%(dataset_name, lstmsize, int(dropout*100), batch_size, int(learning_rate*100000)))
+    loss_file = os.path.join(output_dir, "loss_files/%s_loss_lstmsize%s_lstmsize2%s_dropout%s_batch%s_lr%s_complete.txt"%(dataset_name, lstmsize, lstmsize2, int(dropout*100), batch_size, int(learning_rate*100000)))
         
     with open(outfile, 'w') as fout:
         fout.write("%s;%s;%s;%s;%s\n"%("dataset", "method", "nr_events", "metric", "score"))
@@ -116,7 +117,7 @@ for dataset_name in datasets:
         dt_train[label_col] = train[label_col].apply(lambda x: 1 if x == pos_label else 0)
 
         data_dim = dt_train.shape[1] - 2
-        
+          
         grouped = dt_train.groupby(case_id_col)
         start = time.time()
         X = np.empty((len(grouped), max_len, data_dim), dtype=np.float32)
@@ -140,6 +141,7 @@ for dataset_name in datasets:
         print('Build model...')
         model = Sequential()
         model.add(LSTM(lstmsize, input_shape=(time_dim, data_dim), return_sequences=True))
+        model.add(LSTM(lstmsize2, input_shape=(time_dim, lstmsize), return_sequences=True))
         model.add(Dropout(dropout))
         model.add(TimeDistributed(Dense(n_classes, activation='softmax'), input_shape=(time_dim, data_dim)))
         
@@ -154,7 +156,7 @@ for dataset_name in datasets:
         with open(loss_file, 'w') as fout2:
             fout2.write("epoch;train_loss;val_loss;params;dataset\n")
             for epoch in range(nb_epoch):
-                fout2.write("%s;%s;%s;%s;%s\n"%(epoch, history.history['loss'][epoch], history.history['val_loss'][epoch], "lstmsize%s_dropout%s_lr%s_complete"%(lstmsize, int(dropout*100), int(learning_rate*100000)), dataset_name))
+                fout2.write("%s;%s;%s;%s;%s\n"%(epoch, history.history['loss'][epoch], history.history['val_loss'][epoch], "lstmsize%s_lstmsize2%s_dropout%s_lr%s_complete"%(lstmsize, lstmsize2, int(dropout*100), int(learning_rate*100000)), dataset_name))
         
         
         # load the best weights
@@ -175,7 +177,6 @@ for dataset_name in datasets:
             dt_test = pd.concat([dt_test_scaled, dt_test_cat], axis=1)
             dt_test[case_id_col] = relevant_grouped_test.head(nr_events)[case_id_col]
             dt_test[label_col] = relevant_grouped_test.head(nr_events)[label_col].apply(lambda x: 1 if x == pos_label else 0)
-
             # add missing columns if necessary
             missing_cols = [col for col in dt_train.columns if col not in dt_test.columns]
             for col in missing_cols:
