@@ -51,13 +51,15 @@ output_dir = "/storage/anna_irene"
 ##### MAIN PART ######    
 
 for dataset_name in datasets:
+    
+    params = "lstmsize%s_dropout%s_lr%s_complete"%(lstmsize, int(dropout*100), int(learning_rate*100000))
         
-    outfile = os.path.join(output_dir, "results/results_lstm_%s_lstmsize%s_dropout%s_batch%s_lr%s_complete.csv"%(dataset_name, lstmsize, int(dropout*100), batch_size, int(learning_rate*100000)))
+    outfile = os.path.join(output_dir, "results/results_lstm_%s_%s.csv"%(dataset_name, params))
         
-    checkpoint_prefix = os.path.join(output_dir, "checkpoints/%s_weights_lstmsize%s_dropout%s_batch%s_lr%s_complete"%(dataset_name, lstmsize, int(dropout*100), batch_size, int(learning_rate*100000)))
+    checkpoint_prefix = os.path.join(output_dir, "checkpoints/weights_%s_%s"%(dataset_name, params))
     checkpoint_filepath = "%s.{epoch:02d}-{val_loss:.2f}.hdf5"%checkpoint_prefix
     
-    loss_file = os.path.join(output_dir, "loss_files/%s_loss_lstmsize%s_dropout%s_batch%s_lr%s_complete.txt"%(dataset_name, lstmsize, int(dropout*100), batch_size, int(learning_rate*100000)))
+    loss_file = os.path.join(output_dir, "loss_files/loss_%s_%s.txt"%(dataset_name, params))
         
     with open(outfile, 'w') as fout:
         fout.write("%s;%s;%s;%s;%s\n"%("dataset", "method", "nr_events", "metric", "score"))
@@ -154,7 +156,7 @@ for dataset_name in datasets:
         with open(loss_file, 'w') as fout2:
             fout2.write("epoch;train_loss;val_loss;params;dataset\n")
             for epoch in range(nb_epoch):
-                fout2.write("%s;%s;%s;%s;%s\n"%(epoch, history.history['loss'][epoch], history.history['val_loss'][epoch], "lstmsize%s_dropout%s_lr%s_complete"%(lstmsize, int(dropout*100), int(learning_rate*100000)), dataset_name))
+                fout2.write("%s;%s;%s;%s;%s\n"%(epoch, history.history['loss'][epoch], history.history['val_loss'][epoch], params, dataset_name))
         
         
         # load the best weights
