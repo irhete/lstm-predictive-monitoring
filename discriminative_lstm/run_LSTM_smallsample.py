@@ -16,11 +16,12 @@ from keras.callbacks import EarlyStopping
 from keras.preprocessing.sequence import pad_sequences
 from keras.layers.wrappers import TimeDistributed
 from keras.callbacks import ModelCheckpoint
+from keras.layers.normalization import BatchNormalization
 from sklearn.preprocessing import MinMaxScaler
 import dataset_confs
 import glob
 from sklearn.metrics import roc_auc_score, precision_recall_fscore_support
-
+from sys import argv
 
 #datasets = ["bpic2011_f%s"%formula for formula in range(1,2)]
 #datasets = ["bpic2015_%s_f%s"%(municipality, formula) for municipality in range(1,6) for formula in range(1,3)]
@@ -36,15 +37,18 @@ prefix_lengths = list(range(1,21))
 
 train_ratio = 0.8
 max_len = 20
-lstmsize = 16
-lstmsize2 = 16
-dropout = 0
-learning_rate = 0.001
 loss = 'binary_crossentropy'
-nb_epoch = 200
-batch_size = 8
 time_dim = max_len
 n_classes = 2
+
+lstmsize = int(argv[1])
+lstmsize2 = int(argv[2])
+dropout = float(argv[3])
+learning_rate = float(argv[4])
+nb_epoch = int(argv[5])
+batch_size = int(argv[6])
+sample_size = int(argv[7])
+
 
 output_dir = "/storage/anna_irene"
 
@@ -53,21 +57,25 @@ output_dir = "/storage/anna_irene"
 
 for dataset_name in datasets:
     
-    params = "lstmsize%s_dropout%s_lr%s_complete_1sample"%(lstmsize, int(dropout*100), int(learning_rate*100000))
+    print("Started")
+    
+    params = "lstmsize%s_lstm2size%s_dropout%s_lr%s_epoch%s_batchsize%s_sample%s"%(lstmsize, lstmsize2, int(dropout*100), int(learning_rate*100000), nb_epoch, batch_size, sample_size)
         
     outfile = os.path.join(output_dir, "results/results_lstm_%s_%s.csv"%(dataset_name, params))
         
     checkpoint_prefix = os.path.join(output_dir, "checkpoints/weights_%s_%s"%(dataset_name, params))
     checkpoint_filepath = "%s.{epoch:02d}-{val_loss:.2f}.hdf5"%checkpoint_prefix
     
-    loss_file = os.path.join(output_dir, "loss_files/loss_%s_%s.txt"%(dataset_name, params))
+    loss_file = os.path.join(output_dir, "loss_files/loss_%s_sample%s_%s.txt"%(dataset_name, sample_size, params))
         
-    with open(outfile, 'w') as fout:
-        fout.write("%s;%s;%s;%s;%s\n"%("dataset", "method", "nr_events", "metric", "score"))
+    #with open(outfile, 'w') as fout:
+    #    fout.write("%s;%s;%s;%s;%s\n"%("dataset", "method", "nr_events", "metric", "score"))
+     
+    for xx in range(1):
         
         pos_label = dataset_confs.pos_label[dataset_name]
         neg_label = dataset_confs.neg_label[dataset_name]
-        
+
         
         # read dataset settings
         case_id_col = dataset_confs.case_id_col[dataset_name]
@@ -122,8 +130,8 @@ for dataset_name in datasets:
         
         grouped = dt_train.groupby(case_id_col)
         start = time.time()
-        X = np.empty((1000, max_len, data_dim), dtype=np.float32)
-        y = np.zeros((1000, max_len, n_classes), dtype=np.float32)
+        X = np.empty((sample_size, max_len, data_dim), dtype=np.float32)
+        y = np.zeros((sample_size, max_len, n_classes), dtype=np.float32)
         idx = 0
         for _, group in grouped:
             label = [group[label_col].iloc[0], 1-group[label_col].iloc[0]]
@@ -131,7 +139,7 @@ for dataset_name in datasets:
             X[idx,:,:] = pad_sequences(group[np.newaxis,:max_len,:-2], maxlen=max_len)
             y[idx,:,:] = np.tile(label, (max_len, 1))
             idx += 1
-            if idx >= 1000:
+            if idx >= sample_size:
                 break
         print(time.time() - start) 
         
@@ -145,7 +153,9 @@ for dataset_name in datasets:
         print('Build model...')
         model = Sequential()
         model.add(LSTM(lstmsize, input_shape=(time_dim, data_dim), return_sequences=True))
+        model.add(BatchNormalization())
         model.add(LSTM(lstmsize2, input_shape=(time_dim, lstmsize), return_sequences=True))
+        model.add(BatchNormalization())
         model.add(Dropout(dropout))
         model.add(TimeDistributed(Dense(n_classes, activation='softmax'), input_shape=(time_dim, data_dim)))
         
@@ -157,15 +167,20 @@ for dataset_name in datasets:
         checkpointer = ModelCheckpoint(filepath=checkpoint_filepath, verbose=1, save_best_only=True, save_weights_only=True)
         history = model.fit(X, y, nb_epoch=nb_epoch, batch_size=batch_size, verbose=2, validation_split=0.0)#, callbacks=[checkpointer])
         
+        with open(loss_file, 'w') as fout2:
+            fout2.write("epoch;train_loss;val_loss;params;dataset\n")
+            for epoch in range(nb_epoch):
+                fout2.write("%s;%s;%s;%s;%s\n"%(epoch, history.history['loss'][epoch], history.history['acc'][epoch], params, dataset_name))
+        
         y_pred = model.predict(X)
         
         
         for i in range(max_len):
-            print(np.ravel(y[:,i,0]))
-            print([0 if res < 0.5 else 1 for res in np.ravel(y_pred[:,i,0])])
+            #print(np.ravel(y[:,i,0]))
+            #print([0 if res < 0.5 else 1 for res in np.ravel(y_pred[:,i,0])])
             print(i, np.sum([0 if res < 0.5 else 1 for res in np.ravel(y_pred[:,i,0])] == np.ravel(y[:,i,0])))
-            print()
-        
+
+            
         """
         with open(loss_file, 'w') as fout2:
             fout2.write("epoch;train_loss;val_loss;params;dataset\n")
