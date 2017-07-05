@@ -38,6 +38,7 @@ prefix_lengths = list(range(1,21))
 
 train_ratio = 0.8
 sample_size = int(argv[1])
+val_sample_size = int(argv[2])
 max_len = 20
 
 output_dir = "/storage/anna_irene"
@@ -106,32 +107,46 @@ for dataset_name in datasets:
     data_dim = dt_train.shape[1] - 2
         
     grouped = dt_train.groupby(case_id_col)
-    if sample_size > len(grouped):
-        sample_size = len(grouped)    
-    print("Sample size: ", sample_size)
+    if val_sample_size + sample_size > len(grouped):
+        sample_size = int(len(grouped) * 0.8)
+        val_sample_size = len(grouped) - sample_size
+    print("Sample size: ", sample_size, " Val sample size: ", val_sample_size)
     start = time.time()
     X = np.empty((sample_size, max_len, data_dim), dtype=np.float32)
     y = np.zeros(sample_size)
+    X_val = np.empty((val_sample_size, max_len, data_dim), dtype=np.float32)
+    y_val = np.zeros(val_sample_size)
     idx = 0
     for _, group in grouped:
         label = group[label_col].iloc[0]
         group = group.as_matrix()
-        X[idx,:,:] = pad_sequences(group[np.newaxis,:max_len,:-2], maxlen=max_len)
-        y[idx] = label
-        idx += 1
-        if idx >= sample_size:
+        if idx < sample_size:
+            X[idx,:,:] = pad_sequences(group[np.newaxis,:max_len,:-2], maxlen=max_len)
+            y[idx] = label
+            idx += 1
+        elif idx < sample_size + val_sample_size:
+            X_val[idx-sample_size,:,:] = pad_sequences(group[np.newaxis,:max_len,:-2], maxlen=max_len)
+            y_val[idx-sample_size] = label
+            idx += 1
+        else:
             break
     print("time: ", time.time() - start) 
-        
+    
+    
     correct_all = 0    
+    correct_all_val = 0    
     for nr_events in prefix_lengths:
         X_reshaped = X[:,:nr_events,:].reshape((sample_size, nr_events*data_dim))
+        X_reshaped_val = X_val[:,:nr_events,:].reshape((sample_size, nr_events*data_dim))
 
         cls = RandomForestClassifier(n_estimators=1000, max_features=0.5)
         cls.fit(X_reshaped, y)
         y_pred = cls.predict(X_reshaped)
+        y_pred_val = cls.predict(X_reshaped_val)
         correct = np.sum(y == y_pred)
         correct_all += correct
-        print(nr_events-1, correct)
+        correct_val = np.sum(y_val == y_pred_val)
+        correct_all_val += correct_val
+        print(nr_events-1, correct, correct_val)
         #print(confusion_matrix(y, y_pred))
-    print("accuracy: ", 1.0 * correct_all / sample_size / max_len)
+    print("accuracy: ", 1.0 * correct_all / sample_size / max_len, 1.0 * correct_all_val / val_sample_size / max_len)

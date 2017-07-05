@@ -48,6 +48,7 @@ learning_rate = float(argv[4])
 nb_epoch = int(argv[5])
 batch_size = int(argv[6])
 sample_size = int(argv[7])
+val_sample_size = int(argv[8])
 
 
 output_dir = "/storage/anna_irene"
@@ -129,21 +130,33 @@ for dataset_name in datasets:
         data_dim = dt_train.shape[1] - 2
         
         grouped = dt_train.groupby(case_id_col)
-        if sample_size > len(grouped):
-            sample_size = len(grouped)
-        print("Sample size: ", sample_size)
+        if val_sample_size + sample_size > len(grouped):
+            sample_size = int(len(grouped) * 0.8)
+            val_sample_size = len(grouped) - sample_size
+        print("Sample size: ", sample_size, " Val sample size: ", val_sample_size)
+
         start = time.time()
+        
         X = np.empty((sample_size, max_len, data_dim), dtype=np.float32)
         y = np.zeros((sample_size, max_len, n_classes), dtype=np.float32)
+        X_val = np.empty((val_sample_size, max_len, data_dim), dtype=np.float32)
+        y_val = np.zeros((val_sample_size, max_len, n_classes), dtype=np.float32)
+        
         idx = 0
         for _, group in grouped:
             label = [group[label_col].iloc[0], 1-group[label_col].iloc[0]]
             group = group.as_matrix()
-            X[idx,:,:] = pad_sequences(group[np.newaxis,:max_len,:-2], maxlen=max_len)
-            y[idx,:,:] = np.tile(label, (max_len, 1))
-            idx += 1
-            if idx >= sample_size:
+            if idx < sample_size:
+                X[idx,:,:] = pad_sequences(group[np.newaxis,:max_len,:-2], maxlen=max_len)
+                y[idx,:,:] = np.tile(label, (max_len, 1))
+                idx += 1
+            elif idx < sample_size + val_sample_size:
+                X_val[idx-sample_size,:,:] = pad_sequences(group[np.newaxis,:max_len,:-2], maxlen=max_len)
+                y_val[idx-sample_size,:,:] = np.tile(label, (max_len, 1))
+                idx += 1
+            else:
                 break
+                
         print(time.time() - start) 
         
         classes = np.array([neg_label, pos_label])
@@ -165,89 +178,27 @@ for dataset_name in datasets:
         print('Compiling model...')
         model.compile(loss=loss, optimizer=RMSprop(lr=learning_rate), metrics=["acc"])
         
-        
         print("Training...")
-        checkpointer = ModelCheckpoint(filepath=checkpoint_filepath, verbose=1, save_best_only=True, save_weights_only=True)
-        history = model.fit(X, y, nb_epoch=nb_epoch, batch_size=batch_size, verbose=2, validation_split=0.0)#, callbacks=[checkpointer])
+        checkpointer = ModelCheckpoint(filepath=checkpoint_filepath, monitor='val_acc', verbose=1, save_best_only=True, save_weights_only=True)
+        history = model.fit(X, y, nb_epoch=nb_epoch, batch_size=batch_size, verbose=2, validation_data=(X_val, y_val), callbacks=[checkpointer])
         
         with open(loss_file, 'w') as fout2:
-            fout2.write("epoch;train_loss;val_loss;params;dataset\n")
+            fout2.write("epoch;train_loss;train_acc;val_loss;val_acc;params;dataset\n")
             for epoch in range(nb_epoch):
-                fout2.write("%s;%s;%s;%s;%s\n"%(epoch, history.history['loss'][epoch], history.history['acc'][epoch], params, dataset_name))
-                
-        # load the best weights
-        #lstm_weights_file = glob.glob("%s*.hdf5"%checkpoint_prefix)[-1]
-        #model.load_weights(lstm_weights_file)
-        
-        y_pred = model.predict(X)
-        
-        
-        for i in range(max_len):
-            #print(np.ravel(y[:,i,0]))
-            #print([0 if res < 0.5 else 1 for res in np.ravel(y_pred[:,i,0])])
-            print(i, np.sum([0 if res < 0.5 else 1 for res in np.ravel(y_pred[:,i,0])] == np.ravel(y[:,i,0])))
-
-            
-        """
-        with open(loss_file, 'w') as fout2:
-            fout2.write("epoch;train_loss;val_loss;params;dataset\n")
-            for epoch in range(nb_epoch):
-                fout2.write("%s;%s;%s;%s;%s\n"%(epoch, history.history['loss'][epoch], history.history['val_loss'][epoch], params, dataset_name))
-        
-        
+                fout2.write("%s;%s;%s;%s;%s;%s;%s\n"%(epoch, history.history['loss'][epoch], history.history['acc'][epoch], history.history['val_loss'][epoch], history.history['val_acc'][epoch], params, dataset_name))
+              
         # load the best weights
         lstm_weights_file = glob.glob("%s*.hdf5"%checkpoint_prefix)[-1]
         model.load_weights(lstm_weights_file)
         
+        y_pred = model.predict(X)
+        y_pred_val = model.predict(X_val)
         
-        
-        # test separately for each prefix length
-        for nr_events in prefix_lengths:
+        for i in range(max_len):
+            #print(np.ravel(y[:,i,0]))
+            #print([0 if res < 0.5 else 1 for res in np.ravel(y_pred[:,i,0])])
+            print(i, np.sum([0 if res < 0.5 else 1 for res in np.ravel(y_pred[:,i,0])] == np.ravel(y[:,i,0])), 
+                  np.sum([0 if res < 0.5 else 1 for res in np.ravel(y_pred_val[:,i,0])] == np.ravel(y_val[:,i,0])))
+
             
-            # select only cases that are at least of length nr_events
-            relevant_case_ids = test_case_lengths.index[test_case_lengths >= nr_events]
-            relevant_grouped_test = test[test[case_id_col].isin(relevant_case_ids)].sort_values(timestamp_col, ascending=True).groupby(case_id_col)
-            #test_y = pd.get_dummies(relevant_grouped_test.first()[label_col])[classes].as_matrix()
-            dt_test = relevant_grouped_test.head(nr_events)
-
-            dt_test_scaled = pd.DataFrame(scaler.fit_transform(dt_test[dynamic_num_cols+static_num_cols]), index=dt_test.index, columns=dynamic_num_cols+static_num_cols)
-            dt_test_cat = pd.get_dummies(dt_test[dynamic_cat_cols+static_cat_cols])
-            dt_test = pd.concat([dt_test_scaled, dt_test_cat], axis=1)
-            dt_test[case_id_col] = relevant_grouped_test.head(nr_events)[case_id_col]
-            dt_test[label_col] = relevant_grouped_test.head(nr_events)[label_col].apply(lambda x: 1 if x == pos_label else 0)
-
-            # add missing columns if necessary
-            missing_cols = [col for col in dt_train.columns if col not in dt_test.columns]
-            for col in missing_cols:
-                dt_test[col] = 0
-            dt_test = dt_test[dt_train.columns]
-            
-            grouped = dt_test.groupby(case_id_col)
-
-            test_X = np.empty((len(grouped), max_len, data_dim), dtype=np.float32)
-            test_y = np.empty((len(grouped), n_classes), dtype=np.float32)
-            idx = 0
-            for _, group in grouped:
-                label = [group[label_col].iloc[0], 1-group[label_col].iloc[0]]
-                group = group.as_matrix()
-                test_X[idx] = pad_sequences(group[np.newaxis,:nr_events,:-2], maxlen=max_len)
-                test_y[idx] = label
-                idx += 1
-
-            # predict    
-            preds = model.predict(test_X)[:,max_len-1]#[:,nr_events-1] #(n_test_cases, max_len)
-            
-            # evaluate
-            if len(np.unique(test_y)) < 2:
-                auc = None
-            else:
-                auc = roc_auc_score(test_y, preds)
-                
-            #prec, rec, fscore, _ = precision_recall_fscore_support(test_y[:,np.where(classes==pos_label)[0][0]], [0 if pred < 0.5 else 1 for pred in preds[:,np.where(classes==pos_label)[0][0]]], average="binary")
-                
-
-            fout.write("%s;%s;%s;%s;%s\n"%(dataset_name, method_name, nr_events, "auc", auc))
-            #fout.write("%s;%s;%s;%s;%s\n"%(dataset_name, method_name, nr_events, "precision", prec))
-            #fout.write("%s;%s;%s;%s;%s\n"%(dataset_name, method_name, nr_events, "recall", rec))
-            #fout.write("%s;%s;%s;%s;%s\n"%(dataset_name, method_name, nr_events, "fscore", fscore))
-       """          
+       
