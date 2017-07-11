@@ -1,3 +1,4 @@
 .ipynb_checkpoints/
 generative_lstm/*
 discriminative_lstm/results
+data

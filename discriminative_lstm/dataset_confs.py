@@ -12,7 +12,7 @@ dynamic_num_cols = {}
 static_num_cols = {}
 filename = {}
 
-logs_dir = "/storage/hpc_irheta/labeled_logs_csv_processed"
+logs_dir = "../data"
 
 #### BPIC2011 settings ####
 for formula in range(1,5):

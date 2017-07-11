@@ -51,7 +51,7 @@ sample_size = int(argv[7])
 val_sample_size = int(argv[8])
 
 
-output_dir = "/storage/anna_irene"
+output_dir = "results"
 
     
 ##### MAIN PART ######    
