@@ -58,7 +58,6 @@ for dataset_name in datasets:
     dt_test = dataset_manager.encode_data(test)
     X, y = dataset_manager.generate_3d_data(dt_train, max_len)
     X_val, y_val = dataset_manager.generate_3d_data(dt_val, max_len)
-    X_test, y_test = dataset_manager.generate_3d_data(dt_test, max_len)
     print("Done: %s"%(time.time() - start))
         
     print('Building and compiling the model...')
@@ -84,32 +83,36 @@ for dataset_name in datasets:
     start = time.time()
     y_pred = model.predict(X)
     y_pred_val = model.predict(X_val)
-    y_pred_test = model.predict(X_test)
     print("Done: %s"%(time.time() - start))
         
-    print('Evaluating...')
+    print('Predicting for test set and evaluating...')
     start = time.time()
     with open(results_file, 'w') as fout:
         csv_writer = csv.writer(fout, delimiter=';', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-        csv_writer.writerow(["dataset", "cls", "params", "nr_events", "metric", "score"])
+        csv_writer.writerow(["dataset", "cls", "params", "nr_events", "nr_events_predy", "metric", "score"])
 
         correct_all_train = 0    
         correct_all_val = 0 
         correct_all_test = 0 
         for i in range(max_len):
+            X_test, y_test = dataset_manager.generate_3d_data_for_prefix_length(dt_test, max_len, i+1)
+            y_pred_test = model.predict(X_test)
+            
             correct_train = np.sum([0 if res < 0.5 else 1 for res in np.ravel(y_pred[:,i,0])] == np.ravel(y[:,i,0]))
             correct_val = np.sum([0 if res < 0.5 else 1 for res in np.ravel(y_pred_val[:,i,0])] == np.ravel(y_val[:,i,0]))
             correct_test = np.sum([0 if res < 0.5 else 1 for res in np.ravel(y_pred_test[:,i,0])] == np.ravel(y_test[:,i,0]))
             print(i, correct_train, correct_val, correct_test)
-            csv_writer.writerow([dataset_name, cls_method, params, i, "tp_train", correct_train])
-            csv_writer.writerow([dataset_name, cls_method, params, i, "tp_val", correct_val])
-            csv_writer.writerow([dataset_name, cls_method, params, i, "tp_test", correct_test])
-            csv_writer.writerow([dataset_name, cls_method, params, i, "count_train", X.shape[0]])
-            csv_writer.writerow([dataset_name, cls_method, params, i, "count_val", X_val.shape[0]])
-            csv_writer.writerow([dataset_name, cls_method, params, i, "count_test", X_test.shape[0]])
-            csv_writer.writerow([dataset_name, cls_method, params, i, "acc_train", 1.0 * correct_train / X.shape[0]])
-            csv_writer.writerow([dataset_name, cls_method, params, i, "acc_val", 1.0 * correct_val / X_val.shape[0]])
-            csv_writer.writerow([dataset_name, cls_method, params, i, "acc_test", 1.0 * correct_test / X_test.shape[0]])
+            csv_writer.writerow([dataset_name, cls_method, params, i, -1, "tp_train", correct_train])
+            csv_writer.writerow([dataset_name, cls_method, params, i, -1, "tp_val", correct_val])
+            csv_writer.writerow([dataset_name, cls_method, params, i, -1, "tp_test", correct_test])
+            csv_writer.writerow([dataset_name, cls_method, params, i, -1, "count_train", X.shape[0]])
+            csv_writer.writerow([dataset_name, cls_method, params, i, -1, "count_val", X_val.shape[0]])
+            csv_writer.writerow([dataset_name, cls_method, params, i, -1, "count_test", X_test.shape[0]])
+            csv_writer.writerow([dataset_name, cls_method, params, i, -1, "acc_train", 1.0 * correct_train / X.shape[0]])
+            csv_writer.writerow([dataset_name, cls_method, params, i, -1, "acc_val", 1.0 * correct_val / X_val.shape[0]])
+            csv_writer.writerow([dataset_name, cls_method, params, i, -1, "acc_test", 1.0 * correct_test / X_test.shape[0]])
+            for j in range(max_len):
+                csv_writer.writerow([dataset_name, cls_method, params, i, j, "auc_test", roc_auc_score(np.ravel(y_test[:,i,0]), np.ravel(y_pred_test[:,j,0]))])
 
             correct_all_train += correct_train
             correct_all_val += correct_val
@@ -120,11 +123,11 @@ for dataset_name in datasets:
               1.0 * correct_all_val / X_val.shape[0] / max_len,
               1.0 * correct_all_test / X_test.shape[0] / max_len)
         
-        csv_writer.writerow([dataset_name, cls_method, params, -1, "acc_all_train",
+        csv_writer.writerow([dataset_name, cls_method, params, -1, -1, "acc_all_train",
                              1.0 * correct_all_train / X.shape[0] / max_len])
-        csv_writer.writerow([dataset_name, cls_method, params, -1, "acc_all_val",
+        csv_writer.writerow([dataset_name, cls_method, params, -1, -1, "acc_all_val",
                              1.0 * correct_all_val / X_val.shape[0] / max_len])
-        csv_writer.writerow([dataset_name, cls_method, params, -1, "acc_all_test",
+        csv_writer.writerow([dataset_name, cls_method, params, -1, -1, "acc_all_test",
                              1.0 * correct_all_test / X_test.shape[0] / max_len])
         
     print("Done: %s"%(time.time() - start))

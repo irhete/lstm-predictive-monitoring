@@ -100,26 +100,6 @@ for formula in range(1,4):
     dynamic_num_cols[dataset] = ["expense", "duration", "month", "weekday", "hour"]
     static_num_cols[dataset] = ["amount", "points"]
         
-       
-    
-#### SIAE settings ####
-dataset = "siae"
-
-filename[dataset] = os.path.join(logs_dir, "SIAE_label.csv")
-
-case_id_col[dataset] = "Case ID"
-activity_col[dataset] = "Activity"
-timestamp_col[dataset] = "Complete Timestamp"
-label_col[dataset] = "label"
-pos_label[dataset] = "regular"
-neg_label[dataset] = "deviant"
-
-# features for classifier
-dynamic_cat_cols[dataset] = ["Activity", "ID_Documento", "ID_Permesso", "Stato"]
-static_cat_cols[dataset] = ["COD_Genere_Evento", "COD_Seprag", "Descrizione"]
-dynamic_num_cols[dataset] = ["duration", "month", "weekday", "hour"]
-static_num_cols[dataset] = []
-
 
 #### Sepsis Cases settings ####
 dataset = "sepsis_cases"
@@ -163,3 +143,22 @@ dynamic_cat_cols[dataset] = ["Activity", 'Resource', 'Action', 'CreditScore', 'E
 static_cat_cols[dataset] = ['ApplicationType', 'LoanGoal']
 dynamic_num_cols[dataset] = ['FirstWithdrawalAmount', 'MonthlyCost', 'NumberOfTerms', 'OfferedAmount', "duration", "month", "weekday", "hour", "activity_duration"]
 static_num_cols[dataset] = ['RequestedAmount']
+
+
+#### Helpdesk settings ####
+dataset = "helpdesk" 
+
+filename[dataset] = os.path.join(logs_dir, "helpdesk.csv")
+    
+case_id_col[dataset] = "CaseID"
+activity_col[dataset] = "ActivityID"
+timestamp_col[dataset] = "CompleteTimestamp"
+label_col[dataset] = None
+pos_label[dataset] = None
+neg_label[dataset] = None
+
+# features for classifier
+dynamic_cat_cols[dataset] = ["ActivityID"]
+static_cat_cols[dataset] = []
+dynamic_num_cols[dataset] = []
+static_num_cols[dataset] = []

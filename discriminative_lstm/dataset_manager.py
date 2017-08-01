@@ -124,6 +124,28 @@ class DatasetManager:
             idx += 1
                 
         return (X, y)
+    
+    def generate_3d_data_for_prefix_length(self, data, max_len, nr_events):
+        grouped = data.groupby(self.case_id_col)
+        
+        data_dim = data.shape[1] - 2 # all cols minus the class label and case id
+        n_classes = len(data[self.label_col].unique())
+        n_cases = np.sum(grouped.size() >= nr_events)
+        
+        X = np.empty((n_cases, max_len, data_dim), dtype=np.float32)
+        y = np.zeros((n_cases, max_len, n_classes), dtype=np.float32)
+        
+        idx = 0
+        for _, group in grouped:
+            if len(group) < nr_events:
+                continue
+            label = [group[self.label_col].iloc[0], 1-group[self.label_col].iloc[0]]
+            group = group.as_matrix()
+            X[idx,:,:] = pad_sequences(group[np.newaxis,:nr_events,:-2], maxlen=max_len)
+            y[idx,:,:] = np.tile(label, (max_len, 1))
+            idx += 1
+                
+        return (X, y)
 
 
     def generate_prefix_data(self, data, min_length, max_length):

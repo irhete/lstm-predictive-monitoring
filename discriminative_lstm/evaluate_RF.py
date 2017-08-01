@@ -8,6 +8,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sys import argv
 import csv
 from dataset_manager import DatasetManager
+from sklearn.metrics import roc_auc_score
 
 
 datasets = ["bpic2017"]
@@ -45,14 +46,12 @@ for dataset_name in datasets:
     dt_train = dataset_manager.encode_data(train)
     #dt_val = dataset_manager.encode_data(val)
     dt_test = dataset_manager.encode_data(test)
-    X, y = dataset_manager.generate_3d_data(dt_train, max_len)
+    #X, y = dataset_manager.generate_3d_data(dt_train, max_len)
     #X_val, y_val = dataset_manager.generate_3d_data(dt_val, max_len)
-    X_test, y_test = dataset_manager.generate_3d_data(dt_test, max_len)
-    y = y[:,0,0].reshape(y.shape[0])
-    y_test = y_test[:,0,0].reshape(y_test.shape[0])
+    #X_test, y_test = dataset_manager.generate_3d_data(dt_test, max_len)
+    #y = y[:,0,0].reshape(y.shape[0])
+    #y_test = y_test[:,0,0].reshape(y_test.shape[0])
     print("Done: %s"%(time.time() - start))
-    
-    data_dim = X.shape[2]
     
     print('Evaluating...')
     start = time.time()
@@ -63,8 +62,13 @@ for dataset_name in datasets:
         correct_all_train = 0    
         correct_all_test = 0 
         for nr_events in range(1, max_len+1):
-            X_reshaped = X[:,:nr_events,:].reshape((X.shape[0], nr_events*data_dim))
-            X_reshaped_test = X_test[:,:nr_events,:].reshape((X_test.shape[0], nr_events*data_dim))
+            X, y = dataset_manager.generate_3d_data_for_prefix_length(dt_train, nr_events, nr_events)
+            X_test, y_test = dataset_manager.generate_3d_data_for_prefix_length(dt_test, nr_events, nr_events)
+            y = y[:,0,0].reshape(y.shape[0])
+            y_test = y_test[:,0,0].reshape(y_test.shape[0])
+            
+            X_reshaped = X.reshape((X.shape[0], X.shape[1]*X.shape[2]))
+            X_reshaped_test = X_test.reshape((X_test.shape[0], X.shape[1]*X.shape[2]))
 
             cls = RandomForestClassifier(n_estimators=n_estimators, max_features=max_features)
             cls.fit(X_reshaped, y)
@@ -80,6 +84,7 @@ for dataset_name in datasets:
             csv_writer.writerow([dataset_name, cls_method, params, nr_events-1, "count_test", X_test.shape[0]])
             csv_writer.writerow([dataset_name, cls_method, params, nr_events-1, "acc_train", 1.0 * correct_train / X.shape[0]])
             csv_writer.writerow([dataset_name, cls_method, params, nr_events-1, "acc_test", 1.0 * correct_test / X_test.shape[0]])
+            csv_writer.writerow([dataset_name, cls_method, params, nr_events-1, "auc_test", roc_auc_score(y_test, y_pred_test)])
 
             correct_all_train += correct_train
             correct_all_test += correct_test
